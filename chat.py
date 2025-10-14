@@ -18,9 +18,11 @@ import asyncio
 import os
 import sys
 import logging
+import subprocess
 from dotenv import load_dotenv
 from agents import Agent, Runner
 from agents.mcp import MCPServerStdio
+from agents.tracing import set_tracing_disabled
 from mcp.types import CreateMessageResult, TextContent
 from juya_agents import orchestrator_agent
 from pathlib import Path
@@ -112,6 +114,8 @@ class JuyaChatBot:
     def __init__(self):
         self.mcp_server = None
         self.agent_with_mcp = None
+        self.current_agent = None
+        self.input_items = []
 
     async def start(self):
         """启动对话机器人"""
@@ -119,6 +123,19 @@ class JuyaChatBot:
         proxy = os.getenv('http_proxy', 'http://127.0.0.1:1081')
         os.environ['http_proxy'] = proxy
         os.environ['https_proxy'] = proxy
+        set_tracing_disabled(True)  # 禁用 tracing，避免无效的网络请求告警
+
+        # # 输出 MCP Server 版本，便于诊断
+        # try:
+        #     version_result = subprocess.run(
+        #         ["npx", "-y", "schedule-task-mcp", "--version"],
+        #         check=True,
+        #         capture_output=True,
+        #         text=True
+        #     )
+        #     logger.info("schedule-task-mcp version: %s", version_result.stdout.strip())
+        # except Exception as exc:
+        #     logger.warning("Unable to determine schedule-task-mcp version: %s", exc)
 
         print("\n" + "="*70)
         print("🤖 Juya Agent 对话机器人")
@@ -165,6 +182,8 @@ class JuyaChatBot:
                 tools=orchestrator_agent.tools,
                 mcp_servers=[server],
             )
+            self.current_agent = self.agent_with_mcp
+            self.input_items = []
 
             print(f"✅ Agent 已创建: {self.agent_with_mcp.name}")
             print(f"\n提示:")
@@ -190,6 +209,8 @@ class JuyaChatBot:
                     break
                 elif user_input.lower() == 'clear':
                     os.system('clear' if os.name != 'nt' else 'cls')
+                    self.input_items = []
+                    self.current_agent = self.agent_with_mcp
                     continue
                 elif not user_input.strip():
                     continue
@@ -224,12 +245,19 @@ class JuyaChatBot:
     async def process_message(self, message: str):
         """处理用户消息"""
         try:
-            # 使用 Runner 运行带 MCP 工具的 Agent
+            # 添加本轮用户消息
+            self.input_items.append({"role": "user", "content": message})
+
+            # 使用 Runner 运行带 MCP 工具的 Agent，传入完整上下文
             result = await Runner.run(
-                starting_agent=self.agent_with_mcp,
-                input=message,
+                starting_agent=self.current_agent,
+                input=self.input_items,
                 max_turns=10
             )
+
+            # 更新当前 Agent（防止出现 handoff）和上下文
+            self.current_agent = result.last_agent
+            self.input_items = result.to_input_list()
 
             # 提取响应
             response = result.final_output if hasattr(result, 'final_output') else str(result)
