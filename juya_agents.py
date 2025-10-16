@@ -5,8 +5,10 @@ Juya Agent 定义
 
 import os
 from pathlib import Path
+from dotenv import load_dotenv
+from openai import AsyncOpenAI
 
-from agents import Agent  # OpenAI Agents SDK
+from agents import Agent, set_default_openai_client, OpenAIChatCompletionsModel  # OpenAI Agents SDK
 from agents.mcp import MCPServerStdio
 
 from tools import (
@@ -15,38 +17,39 @@ from tools import (
     send_email_report,
 )
 
+# 加载环境变量
+load_dotenv()
+
+# 创建 OpenAI 客户端，显式传入 base_url 和 api_key
+api_key = os.getenv("OPENAI_API_KEY")
+base_url = os.getenv("OPENAI_BASE_URL")
+
+if not api_key:
+    raise ValueError("OPENAI_API_KEY 环境变量未设置")
+
+openai_client = AsyncOpenAI(
+    api_key=api_key,
+    base_url=base_url,
+    timeout=30.0
+)
+
+# 设置为 agents 库的默认客户端
+set_default_openai_client(openai_client, use_for_tracing=False)
+
+model = OpenAIChatCompletionsModel(
+    model="gpt-5-mini",
+    openai_client=openai_client)
+print(f"✅ OpenAI 客户端已配置")
+print(f"   Base URL: {base_url}")
+print(f"   API Key: {api_key[:20]}..." if api_key else "   API Key: 未设置")
+
 
 # ============= MCP Server 配置 =============
 
 # 获取项目根目录
 PROJECT_ROOT = Path(__file__).resolve().parent
 
-# 配置 schedule-task-mcp 服务器
-def get_schedule_mcp_server():
-    """
-    获取 schedule-task-mcp 服务器配置
 
-    返回 MCPServerStdio 配置对象，用于：
-    1. OpenAI Agents SDK 的 MCP 工具集成（通过 mcp_servers 参数）
-    2. 官方 MCP Client 的连接参数（在 manager.py 中用于 sampling 支持）
-
-    注意：sampling_callback 在 manager.py 中通过官方 MCP Client 单独配置
-    """
-    # 环境变量配置
-    schedule_env = {
-        "SCHEDULE_TASK_TIMEZONE": os.getenv("SCHEDULE_TASK_TIMEZONE", "Asia/Shanghai"),
-        "SCHEDULE_TASK_DB_PATH": os.getenv("SCHEDULE_TASK_DB_PATH", str(PROJECT_ROOT / "data" / "schedule_tasks.db")),
-        "SCHEDULE_TASK_SAMPLING_TIMEOUT": os.getenv("SCHEDULE_TASK_SAMPLING_TIMEOUT", "300000"),
-    }
-
-    return MCPServerStdio(
-        name="schedule-task-mcp",
-        params={
-            "command": "npx",
-            "args": ["-y", "schedule-task-mcp"],
-            "env": schedule_env,
-        },
-    )
 
 
 # ============= Agent 定义 =============
@@ -66,7 +69,7 @@ video_checker_agent = Agent(
 - 清晰列出所有新视频的信息
 - 使用友好的语言告知用户
 """,
-    model="gpt-4o-mini",
+    model=model,
     tools=[check_new_videos]
 )
 
@@ -91,7 +94,7 @@ report_generator_agent = Agent(
 - 提供文档路径
 - 说明提取了多少条资讯
 """,
-    model="gpt-4o-mini",
+    model=model,
     tools=[process_video]
 )
 
@@ -114,7 +117,7 @@ email_sender_agent = Agent(
 - 明确告知用户邮件是否发送成功
 - 如果失败，说明失败原因
 """,
-    model="gpt-4o-mini",
+    model=model,
     tools=[send_email_report]
 )
 
@@ -148,7 +151,7 @@ orchestrator_agent = Agent(
 
 根据用户的请求，灵活调用相应的工具。
 """,
-    model="gpt-4o-mini",
+    model=model,
     tools=[
         check_new_videos,
         process_video,

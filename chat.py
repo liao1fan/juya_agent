@@ -86,7 +86,7 @@ def create_sampling_callback(base_agent):
 
             # 返回符合 MCP Sampling 规范的响应
             return CreateMessageResult(
-                model=base_agent.model or "gpt-4o-mini",
+                model=base_agent.model.model if hasattr(base_agent.model, 'model') else str(base_agent.model) if base_agent.model else "gpt-5-mini",
                 role="assistant",
                 content=TextContent(type="text", text=response_text),
                 stopReason="endTurn"
@@ -99,7 +99,7 @@ def create_sampling_callback(base_agent):
 
             # 即使失败也返回规范的响应
             return CreateMessageResult(
-                model=base_agent.model or "gpt-4o-mini",
+                model=base_agent.model.model if hasattr(base_agent.model, 'model') else str(base_agent.model) if base_agent.model else "gpt-5-mini",
                 role="assistant",
                 content=TextContent(type="text", text=f"⚠️ {error_msg}"),
                 stopReason="endTurn"
@@ -119,10 +119,9 @@ class JuyaChatBot:
 
     async def start(self):
         """启动对话机器人"""
-        # 设置代理
-        proxy = os.getenv('http_proxy', 'http://127.0.0.1:1081')
-        os.environ['http_proxy'] = proxy
-        os.environ['https_proxy'] = proxy
+        # 清除代理设置（新的 API 地址不需要代理）
+        for key in ['http_proxy', 'https_proxy', 'HTTP_PROXY', 'HTTPS_PROXY']:
+            os.environ.pop(key, None)
         set_tracing_disabled(True)  # 禁用 tracing，避免无效的网络请求告警
 
         # # 输出 MCP Server 版本，便于诊断
@@ -163,10 +162,11 @@ class JuyaChatBot:
             name="schedule-task-mcp",
             params={
                 "command": "npx",
-                "args": ["-y", "schedule-task-mcp"],
+                "args": ["-y", "schedule-task-mcp@0.2.0"],
                 "env": schedule_env,
             },
             sampling_callback=callback,  # ✨ 启用 Sampling 支持
+            client_session_timeout_seconds=30,
         )
 
         print(f"🔌 连接 MCP 服务器: {self.mcp_server.name}")

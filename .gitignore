@@ -1,1 +1,12 @@
 .env
+
+# config目录下的 cookies.json
+config/cookies.json
+
+# data目录下的所有文件（但保留目录本身）
+data/*
+
+# docs目录下的所有文件（但保留目录本身）
+docs/*
+
+__pycache__
