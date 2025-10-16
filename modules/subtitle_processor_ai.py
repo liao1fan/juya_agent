@@ -1,13 +1,13 @@
 """
 AI驱动的字幕处理模块
-使用 GLM API 智能提炼新闻要点、生成概览和提取来源链接
+使用 OpenAI API 智能提炼新闻要点、生成概览和提取来源链接
 """
 
 import os
 import re
 from datetime import datetime
 from typing import List, Dict, Optional
-from zhipuai import ZhipuAI
+from openai import OpenAI
 from dotenv import load_dotenv
 
 load_dotenv()
@@ -17,7 +17,14 @@ class AISubtitleProcessor:
     """AI驱动的字幕智能处理器"""
 
     def __init__(self):
-        self.client = ZhipuAI(api_key=os.getenv("GLM_API_KEY"))
+        # 使用 OpenAI API
+        api_key = os.getenv("OPENAI_API_KEY")
+        base_url = os.getenv("OPENAI_BASE_URL")
+        self.client = OpenAI(
+            api_key=api_key,
+            base_url=base_url,
+            timeout=90.0
+        )
 
     def process(self, subtitle_data: List[Dict], video_info: Dict) -> Dict:
         """
@@ -140,10 +147,9 @@ class AISubtitleProcessor:
 
         try:
             response = self.client.chat.completions.create(
-                model="glm-4-plus",
+                model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                timeout=90  # 90秒超时
+                temperature=0.3
             )
 
             result_text = response.choices[0].message.content.strip()
@@ -238,10 +244,9 @@ class AISubtitleProcessor:
 
         try:
             response = self.client.chat.completions.create(
-                model="glm-4-plus",
+                model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.5,
-                timeout=60  # 60秒超时
+                temperature=0.5
             )
 
             return response.choices[0].message.content.strip()
@@ -302,10 +307,9 @@ class AISubtitleProcessor:
 
         try:
             response = self.client.chat.completions.create(
-                model="glm-4-plus",
+                model="gpt-4o-mini",
                 messages=[{"role": "user", "content": prompt}],
-                temperature=0.3,
-                timeout=90  # 90秒超时
+                temperature=0.3
             )
 
             result_text = response.choices[0].message.content.strip()
